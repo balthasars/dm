@@ -34,3 +34,29 @@ Relevant functions for interaction with DBs:
 - `cdm_copy_to()`
 - `cdm_set_key_constraints()`
 - `cdm_learn_from_db()`
+
+In order to work with databases, you first need to connect to one.
+
+```{r}
+# real life example? can also use a different one
+library(dm)
+library(dplyr)
+library(DBI)
+con <- src_mysql(
+  dbname = "company",
+  host = "courses.csrrinzqubik.us-east-1.rds.amazonaws.com",
+  port = 3306,
+  user = "student",
+  password = "datacamp"
+)
+```
+
+# `cdm_copy_to()`
+
+Having connected, we can transfer some data into the database. 
+In {dm}, we do this using `cdm_copy_to()`. 
+
+```{r}
+cdm_copy_to(con, cdm_nycflights13())
+```
+
