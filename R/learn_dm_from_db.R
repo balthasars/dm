@@ -1,6 +1,6 @@
 #' Learn a [`dm`] object from a database (DB)
 #'
-#' @description Assuming, there are permament tables on a DB, you can turn these
+#' @description Assuming, there are permanent tables on a DB, you can turn these
 #' into a [`dm`] object. The key constraints are also learned from the DB and taken into
 #' account.
 #'
