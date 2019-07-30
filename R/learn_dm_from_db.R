@@ -4,13 +4,13 @@
 #' into a [`dm`] object. The key constraints are also learned from the DB and taken into
 #' account.
 #'
-#' So far this only works for MSSQL and Postgres. Also, you can not specify a schema to learn from.
+#' So far this only works for MSSQL and Postgres. Also, you cannot specify a schema to learn from.
 #'
 #' @param dest A `src`-object on a DB or a connection to a DB.
 #'
 #' @family DB interaction functions
 #'
-#' @return A [`dm`] object with the tables from the DB and the respective key relations.
+#' @return A [`dm`] object with the tables from the DB and their respective key relations.
 #'
 #' @export
 cdm_learn_from_db <- function(dest) {
