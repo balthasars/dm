@@ -5,3 +5,4 @@ inst/doc
 .Rprofile.local
 docs/
 .Rprofile
+.DS_Store
