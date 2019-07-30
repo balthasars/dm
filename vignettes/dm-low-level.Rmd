@@ -1,9 +1,9 @@
 ---
-title: "Low level operations"
+title: "Low-level operations"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Low level operations}
+  %\VignetteIndexEntry{Low-level operations}
   %\VignetteEncoding{UTF-8}
   %\VignetteEngine{knitr::rmarkdown}
 editor_options: 
