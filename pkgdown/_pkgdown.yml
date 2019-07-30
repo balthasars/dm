@@ -104,11 +104,13 @@ navbar:
     href: reference/index.html
   - text: Articles
     menu:
+    - text: Setting up dm objects
+      href: articles/setting_up_dm.Rmd
     - text: Class 'dm' and basic operations
       href: articles/dm-class-and-basic-operations.html
     - text: Visualizing 'dm' objects
       href: articles/dm-visualization.html
-    - text: Low level operations
+    - text: Low-level operations
       href: articles/dm-low-level.html
   - text: News
     href: news/index.html
