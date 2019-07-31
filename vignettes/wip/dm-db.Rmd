@@ -114,7 +114,3 @@ Let's check out what this does:
 <!-- nycflights13_from_remote <- cdm_learn_from_db(nycflights13_remote) -->
 
 <!-- ``` -->
-
-```{r}
-```
-
