@@ -47,7 +47,6 @@ First, we connect to the default Postgres database.
 library(dm)
 library(DBI)
 library(dbplyr)
-# library(odbc)
 con <- dbConnect(RPostgres::Postgres())
 ```
 
@@ -65,30 +64,38 @@ If we call up the object `con` now, we'll see that we've added the new tables:
 RPostgres::dbListTables(con)
 ```
 
-# Learning from databases — `cdm_learn_from_db()`
+# Learning from databases — `cdm_learn_from_db ()`
 
-Having copied some tables to the database above, 
+Having copied some tables to the database above, we can do the reverse operation: 
 
 ```{r}
-# src_postgres <- dplyr::src_postgres()
-# cdm_learn_from_db(con)
-# throws an error
+# cdm_learn_from_db(con) # not sure why this wouldn't work, but it doesn't
+src_postgres() %>% 
+  cdm_learn_from_db()
 ```
+
++++ add example here where the contents of a DB are not yet a {dm} object.
+For example using the equivalent of `dbplyr::lahman_sqlite()`, `dbplyr::lahman_postgres()` does not appear to be working for some reason (see s [currently unanswered Stackoverflow question](https://stackoverflow.com/questions/57290681/rs-dbi-driver-could-not-connect-userlocalhost5432-on-dbname-lahman-fatal)). +++ 
 
 # Setting key constraints - `cdm_set_key_constraints()`
 
-`cdm_set_key_constraints()` takes a dm object that lives in a DB and mirrors the dm key constraints on the database. [text from function help page — I don't get what this does].
+`cdm_set_key_constraints()` takes a dm object that lives in a DB and mirrors the dm key constraints on the database. [text from function help page — I don't know if I get what this does].
 
-This is useful due to lorem ipsum dolor sit amet. 
+This means that the information you've provided to {dm} about primary keys and foreign keys is transferred to the database. 
+In other words, upon applying `cdm_set_key_constraints()`, the database will also be aware about information such as:
+- whether a certain column is a primary key
+- if a column type cannot be NULL
+- if a certain column serves as a foreign key to other tables
 
-Let's check out what this does:
+In order to do so, you need to set the appropriate option when transferring data to the database:
 
 ```{r}
-# cdm_set_key_constraints(con)
-# throws an error
+cdm_copy_to(
+  dest = con, 
+  dm = cdm_nycflights13(), 
+  set_key_constraints = TRUE
+  )
 ```
-
-
 
 <!-- --- -->
 <!-- <!-- using rsqlite instead  --> -->
