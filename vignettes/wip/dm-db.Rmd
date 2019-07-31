@@ -26,37 +26,95 @@ knit_print.grViz <- function(x, ...) {
 }
 ```
 
-FIXME: 
-This vignette is not yet written, but will be available in a future update.
+{dm} integrates well into {dbplyr} workflows — however, currently it only supports MSSQL and Postgres DBMS — more are planned for future releases.
 
-Relevant functions for interaction with DBs:
+<!-- Relevant functions for interaction with DBs: -->
 
-- `cdm_copy_to()`
-- `cdm_set_key_constraints()`
-- `cdm_learn_from_db()`
+<!-- - `cdm_copy_to()` -->
+<!-- - `cdm_set_key_constraints()` -->
+<!-- - `cdm_learn_from_db()` -->
 
-In order to work with databases, you first need to connect to one.
+# Setting up the example
+
+In order to work with a databases, you first need to connect to one.
+We'll use a local Postgres database for this.
+
+This requires you to have the PostgreSQL driver installed and activated (see install guides for [Mac OS X](https://www.robinwieruch.de/postgres-sql-macos-setup/), [Ubuntu 18.04](https://www.digitalocean.com/community/tutorials/how-to-install-and-use-postgresql-on-ubuntu-18-04), [Windows](https://www.microfocus.com/documentation/idol/IDOL_12_0/MediaServer/Guides/html/English/Content/Getting_Started/Configure/_TRN_Set_up_PostgreSQL.htm)). Also see this [Stackoverflow question](https://stackoverflow.com/questions/17633422/psql-fatal-database-user-does-not-exist) if you get the error `psql: FATAL: database “<user>” does not exist`. 
+
+First, we connect to the default Postgres database.
 
 ```{r}
-# real life example? can also use a different one
 library(dm)
-library(dplyr)
 library(DBI)
-con <- src_mysql(
-  dbname = "company",
-  host = "courses.csrrinzqubik.us-east-1.rds.amazonaws.com",
-  port = 3306,
-  user = "student",
-  password = "datacamp"
-)
+library(dbplyr)
+# library(odbc)
+con <- dbConnect(RPostgres::Postgres())
 ```
 
-# `cdm_copy_to()`
+# Getting {dm} objects into a database using `cdm_copy_to`
 
-Having connected, we can transfer some data into the database. 
-In {dm}, we do this using `cdm_copy_to()`. 
+Next, we'll copy the built-in example {dm} object `cdm_nycflights13()` to this database.
 
 ```{r}
-cdm_copy_to(con, cdm_nycflights13())
+cdm_copy_to(dest = con, dm = cdm_nycflights13())
+```
+
+If we call up the object `con` now, we'll see that we've added the new tables:
+
+```{r}
+RPostgres::dbListTables(con)
+```
+
+# Learning from databases — `cdm_learn_from_db()`
+
+Having copied some tables to the database above, 
+
+```{r}
+# src_postgres <- dplyr::src_postgres()
+# cdm_learn_from_db(con)
+# throws an error
+```
+
+# Setting key constraints - `cdm_set_key_constraints()`
+
+`cdm_set_key_constraints()` takes a dm object that lives in a DB and mirrors the dm key constraints on the database. [text from function help page — I don't get what this does].
+
+This is useful due to lorem ipsum dolor sit amet. 
+
+Let's check out what this does:
+
+```{r}
+# cdm_set_key_constraints(con)
+# throws an error
+```
+
+
+
+<!-- --- -->
+<!-- <!-- using rsqlite instead  --> -->
+
+<!-- ```{r} -->
+<!-- con <- dbConnect(RSQLite::SQLite(), ":memory:") -->
+<!-- cdm_copy_to(dest = con, dm = cdm_nycflights13()) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- cdm_learn_from_db(con) -->
+
+<!-- cdm_learn_from_db() -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- library(dplyr) -->
+<!-- src_sqlite <- src_sqlite(":memory:", create = TRUE) -->
+<!-- src_sqlite -->
+<!-- nycflights13_remote <- cdm_copy_to(src_sqlite, cdm_nycflights13(cycle = TRUE)) -->
+<!-- nycflights13_remote -->
+<!-- src_postgres <- src_postgres() -->
+<!-- nycflights13_from_remote <- cdm_learn_from_db(nycflights13_remote) -->
+
+<!-- ``` -->
+
+```{r}
 ```
 
