@@ -12,6 +12,7 @@ articles:
   - dm-class-and-basic-operations
   - dm-visualization
   - dm-low-level
+  - dm-setting_up_objects
 
 reference:
 - title: Creating `dm` objects and basic functions
@@ -105,7 +106,7 @@ navbar:
   - text: Articles
     menu:
     - text: Setting up dm objects
-      href: articles/setting_up_dm.Rmd
+      href: articles/dm-setting_up_objects.html
     - text: Class 'dm' and basic operations
       href: articles/dm-class-and-basic-operations.html
     - text: Visualizing 'dm' objects
