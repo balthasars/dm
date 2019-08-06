@@ -1,5 +1,5 @@
 ---
-title: "Filtering"
+title: "Filtering and Joining"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
 vignette: >
@@ -35,3 +35,18 @@ Relevant functions for filtering `dm` objects:
 - `cdm_filter()`
 - `cdm_semi_join()`
 - `cdm_nrow()`
+
+```{r}
+library(dm)
+library(dplyr)
+dm_pq <-
+  cdm_nycflights13() %>%
+  cdm_select_tbl(-planes, all_connected = FALSE) %>%
+  cdm_filter(flights, month == 1) %>%
+  cdm_copy_to(src_postgres(), ., temporary = FALSE)
+
+dm_from_pq <-
+  cdm_learn_from_db(src_postgres())
+
+```
+
