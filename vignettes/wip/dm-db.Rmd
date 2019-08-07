@@ -26,7 +26,7 @@ knit_print.grViz <- function(x, ...) {
 }
 ```
 
-{dm} integrates well into {dbplyr} workflows — however, currently it only supports MSSQL and Postgres DBMS — more are planned for future releases.
+{dm} works well and is at its most powerful when used on databases — integration into {dbplyr} workflows with MSSQL and Postgres DBMS is easy as pie (support for more databases will follow in future versions).
 
 <!-- Relevant functions for interaction with DBs: -->
 
@@ -44,24 +44,37 @@ This requires you to have the PostgreSQL driver installed and activated (see ins
 First, we connect to the default Postgres database.
 
 ```{r}
+library(magrittr)
 library(dm)
 library(DBI)
-library(dbplyr)
+# library(dbplyr)
 con <- dbConnect(RPostgres::Postgres())
 ```
+
+
+
+```{r}
+dbListTables(con)
+#   purrr::map(dbRemoveTable, conn = con)
+# dbRemoveTable(con, "AwardsPlayers")
+```
+
 
 # Getting {dm} objects into a database using `cdm_copy_to`
 
 Next, we'll copy the built-in example {dm} object `cdm_nycflights13()` to this database.
 
 ```{r}
-cdm_copy_to(dest = con, dm = cdm_nycflights13())
+# cdm_copy_to(dest = con, dm = cdm_nycflights13())
+cdm_copy_to(dplyr::src_postgres(), dm = cdm_nycflights13())
+
 ```
 
 If we call up the object `con` now, we'll see that we've added the new tables:
 
 ```{r}
-RPostgres::dbListTables(con)
+RPostgres::dbListTables(con) %>% 
+  as_tibble()
 ```
 
 # Learning from databases — `cdm_learn_from_db ()`
@@ -69,13 +82,13 @@ RPostgres::dbListTables(con)
 Having copied some tables to the database above, we can do the reverse operation: 
 
 ```{r}
-# cdm_learn_from_db(con) # not sure why this wouldn't work, but it doesn't
+cdm_learn_from_db(con) 
 src_postgres() %>% 
   cdm_learn_from_db()
-```
 
-+++ add example here where the contents of a DB are not yet a {dm} object.
-For example using the equivalent of `dbplyr::lahman_sqlite()`, `dbplyr::lahman_postgres()` does not appear to be working for some reason (see s [currently unanswered Stackoverflow question](https://stackoverflow.com/questions/57290681/rs-dbi-driver-could-not-connect-userlocalhost5432-on-dbname-lahman-fatal)). +++ 
+id <- Id(Schema = "information_schema", table = "tables")
+dbReadTable(con, id) %>% as_tibble()
+```
 
 # Setting key constraints - `cdm_set_key_constraints()`
 
