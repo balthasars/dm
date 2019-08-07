@@ -26,7 +26,7 @@ knit_print.grViz <- function(x, ...) {
 }
 ```
 
-{dm} works well and is at its most powerful when used on databases — integration into {dbplyr} workflows with MSSQL and Postgres DBMS is easy as pie (support for more databases will follow in future versions).
+{dm} is at its most powerful you use it with databases — integration with {dbplyr} workflows with MSSQL and Postgres DBMS is easy as pie (full support for more databases will follow in future versions).
 
 <!-- Relevant functions for interaction with DBs: -->
 
@@ -41,17 +41,17 @@ We'll use a local Postgres database for this.
 
 This requires you to have the PostgreSQL driver installed and activated (see install guides for [Mac OS X](https://www.robinwieruch.de/postgres-sql-macos-setup/), [Ubuntu 18.04](https://www.digitalocean.com/community/tutorials/how-to-install-and-use-postgresql-on-ubuntu-18-04), [Windows](https://www.microfocus.com/documentation/idol/IDOL_12_0/MediaServer/Guides/html/English/Content/Getting_Started/Configure/_TRN_Set_up_PostgreSQL.htm)). Also see this [Stackoverflow question](https://stackoverflow.com/questions/17633422/psql-fatal-database-user-does-not-exist) if you get the error `psql: FATAL: database “<user>” does not exist`. 
 
-First, we connect to the default Postgres database.
+Let's connect to the default Postgres database. 
+
+We'll do so here using {DBI}:
 
 ```{r}
 library(magrittr)
 library(dm)
+library(dplyr)
 library(DBI)
-# library(dbplyr)
 con <- dbConnect(RPostgres::Postgres())
 ```
-
-
 
 ```{r}
 dbListTables(con)
@@ -59,16 +59,35 @@ dbListTables(con)
 # dbRemoveTable(con, "AwardsPlayers")
 ```
 
-
 # Getting {dm} objects into a database using `cdm_copy_to`
 
 Next, we'll copy the built-in example {dm} object `cdm_nycflights13()` to this database.
 
-```{r}
+```{r eval = FALSE}
 # cdm_copy_to(dest = con, dm = cdm_nycflights13())
-cdm_copy_to(dplyr::src_postgres(), dm = cdm_nycflights13())
 
+remote_dm <- cdm_copy_to(
+  con, 
+  dm = cdm_nycflights13(), 
+  set_key_constraints = FALSE, 
+  temporary = TRUE
+  )
+
+collect(remote_dm)
 ```
+
+```{r}
+remote_src <- dm:::src_from_src_or_con(con)
+remote_dm <- 
+  cdm_copy_to(
+  remote_src, 
+  dm = cdm_nycflights13(), 
+  set_key_constraints = FALSE, 
+  temporary = TRUE
+  )
+remote_dm %>% collect()
+```
+
 
 If we call up the object `con` now, we'll see that we've added the new tables:
 
@@ -109,6 +128,15 @@ cdm_copy_to(
   set_key_constraints = TRUE
   )
 ```
+
+# `collect()`
+
+`collect()` provides a method to retrieve tables from a database and saves them  a {dm} object.
+
+```{r}
+dbListTables(con)
+```
+
 
 <!-- --- -->
 <!-- <!-- using rsqlite instead  --> -->
