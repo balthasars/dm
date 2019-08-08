@@ -26,7 +26,9 @@ knit_print.grViz <- function(x, ...) {
 }
 ```
 
-{dm} is at its most powerful you use it with databases — integration with {dbplyr} workflows with MSSQL and Postgres DBMS is easy as pie (full support for more databases will follow in future versions).
+{dm} is at its most powerful used with databases — integration with {dbplyr} workflows with MSSQL and Postgres DBMS is easy as pie — full support for more databases will follow in future versions.
+
+This article shows you how to copy a {dm} object to a database, how to set key constraint and how to get tables from databases to your local machine. 
 
 <!-- Relevant functions for interaction with DBs: -->
 
@@ -41,92 +43,99 @@ We'll use a local Postgres database for this.
 
 This requires you to have the PostgreSQL driver installed and activated (see install guides for [Mac OS X](https://www.robinwieruch.de/postgres-sql-macos-setup/), [Ubuntu 18.04](https://www.digitalocean.com/community/tutorials/how-to-install-and-use-postgresql-on-ubuntu-18-04), [Windows](https://www.microfocus.com/documentation/idol/IDOL_12_0/MediaServer/Guides/html/English/Content/Getting_Started/Configure/_TRN_Set_up_PostgreSQL.htm)). Also see this [Stackoverflow question](https://stackoverflow.com/questions/17633422/psql-fatal-database-user-does-not-exist) if you get the error `psql: FATAL: database “<user>” does not exist`. 
 
-Let's connect to the default Postgres database. 
+## Establishing a Connection With a Postgres Database
 
+First, we'll establish a connection with your default local Postgres database. 
 We'll do so here using {DBI}:
 
 ```{r}
-library(magrittr)
 library(dm)
-library(dplyr)
 library(DBI)
+library(dplyr)
+
 con <- dbConnect(RPostgres::Postgres())
 ```
 
+To check if any tables are already in your database, use `DBI::dbListTables()` on the connection object:
 ```{r}
 dbListTables(con)
-#   purrr::map(dbRemoveTable, conn = con)
-# dbRemoveTable(con, "AwardsPlayers")
 ```
 
-# Getting {dm} objects into a database using `cdm_copy_to`
+If tables `r cdm_nycflights13() %>% cdm_get_tables() %>% attr("names")` are already inside your database, delete them if you wish to use `cdm_copy_to()` with the example below, using `DBI::dbRemoveTable()`.
 
-Next, we'll copy the built-in example {dm} object `cdm_nycflights13()` to this database.
+If you wish to delete all tables inside the database, you may also try `dbListTables(con) %>% purrr::map(dbRemoveTable, conn = con)`.
 
-```{r eval = FALSE}
-# cdm_copy_to(dest = con, dm = cdm_nycflights13())
+If you receive an error message saying you cannot delete a table because other objects depend on them, run:
 
+```{r}
+dbListTables(con) %>%
+  purrr::map(~ DBI::dbExecute(
+    conn = con,
+    paste("DROP TABLE", .x, "CASCADE")
+  ))
+```
+
+This removes all tables and those that depend on them.
+
+# Transferring a {dm} object to a database using `cdm_copy_to`
+
+Let's copy the built-in example {dm} object `cdm_nycflights13()` to our example database.
+
+```{r}
 remote_dm <- cdm_copy_to(
   con, 
   dm = cdm_nycflights13(), 
-  set_key_constraints = FALSE, 
-  temporary = TRUE
+  set_key_constraints = FALSE#,
+  # temporary = TRUE
   )
-
-collect(remote_dm)
 ```
+
+Make sure that you allocate your function call to an object to work with later.
+This is necessary if you wish to work with the server later on — for example when you with to use `collect()`, as described below.
+
+If we call up the object `con` now, you can see that the tables have been added:
 
 ```{r}
-remote_src <- dm:::src_from_src_or_con(con)
-remote_dm <- 
-  cdm_copy_to(
-  remote_src, 
-  dm = cdm_nycflights13(), 
-  set_key_constraints = FALSE, 
-  temporary = TRUE
-  )
-remote_dm %>% collect()
+RPostgres::dbListTables(con)
 ```
 
+## Setting Key Constraints on the Database
 
-If we call up the object `con` now, we'll see that we've added the new tables:
-
-```{r}
-RPostgres::dbListTables(con) %>% 
-  as_tibble()
-```
-
-# Learning from databases — `cdm_learn_from_db ()`
-
-Having copied some tables to the database above, we can do the reverse operation: 
-
-```{r}
-cdm_learn_from_db(con) 
-src_postgres() %>% 
-  cdm_learn_from_db()
-
-id <- Id(Schema = "information_schema", table = "tables")
-dbReadTable(con, id) %>% as_tibble()
-```
-
-# Setting key constraints - `cdm_set_key_constraints()`
-
-`cdm_set_key_constraints()` takes a dm object that lives in a DB and mirrors the dm key constraints on the database. [text from function help page — I don't know if I get what this does].
-
-This means that the information you've provided to {dm} about primary keys and foreign keys is transferred to the database. 
-In other words, upon applying `cdm_set_key_constraints()`, the database will also be aware about information such as:
+{dm} supports setting key constraints on the database for MSSQL and Postgres DBMS.
+This means, the {dm} object's local key constraints (information you've provided to {dm} about primary keys and foreign keys) is transferred and applied to the database.
+The database will thus be aware about information such as:
 - whether a certain column is a primary key
 - if a column type cannot be NULL
 - if a certain column serves as a foreign key to other tables
 
-In order to do so, you need to set the appropriate option when transferring data to the database:
+In other words: Be sure to include `set_key_constraints = FALSE` in your function call when using a Postgres or MSSQL database if an operation violates foreign key restraints, as it does in our example object above.
+
+Otherwise your attempt will fail with an error message such as 
+
+```
+Error in result_create(conn@ptr, statement) : 
+  Failed to fetch row: ERROR:  insert or update on table "flights" violates foreign key constraint "flights_tailnum_fkey"
+DETAIL:  Key (tailnum)=(N3ALAA) is not present in table "planes".
+```
+
+When you use DBMS other than the latter two, such as SQLite, you're currently good to go using the default `cdm_copy_to()` option regarding `set_key_constraints`, as {dm} does not yet support setting key constraints yet for those DBMS.
+<!-- As a consequence, {dm} does not execute the checks it would on the former two DBMS. -->
+
+
+# Getting Tables from Databases
+
+To retrieve tables from databases, {dm} offers two ways: `cdm_learn_from_db()` and `collect()`, a method for {dplyr}.
+
+# `cdm_learn_from_db()`
+
 
 ```{r}
-cdm_copy_to(
-  dest = con, 
-  dm = cdm_nycflights13(), 
-  set_key_constraints = TRUE
-  )
+cdm_learn_from_db(remote_dm) 
+src_postgres() %>% 
+  cdm_learn_from_db()
+
+# id <- Id(Schema = "information_schema", table = "tables")
+# dbReadTable(con, id) %>% as_tibble()
 ```
 
 # `collect()`
