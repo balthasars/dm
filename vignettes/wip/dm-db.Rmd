@@ -26,15 +26,10 @@ knit_print.grViz <- function(x, ...) {
 }
 ```
 
-{dm} is at its most powerful used with databases — integration with {dbplyr} workflows with MSSQL and Postgres DBMS is easy as pie — full support for more databases will follow in future versions.
+{dm} is at its most powerful when you use it with databases
+This article shows you how to get your {dm} objects to a database, how to set key constraints and how to get tables from databases to your local machine. 
 
-This article shows you how to copy a {dm} object to a database, how to set key constraint and how to get tables from databases to your local machine. 
-
-<!-- Relevant functions for interaction with DBs: -->
-
-<!-- - `cdm_copy_to()` -->
-<!-- - `cdm_set_key_constraints()` -->
-<!-- - `cdm_learn_from_db()` -->
+Integration with {dbplyr} workflows on MSSQL and Postgres DBMS are easy as pie — full support for more databases will follow in future versions.
 
 # Setting up the example
 
@@ -46,9 +41,9 @@ This requires you to have the PostgreSQL driver installed and activated (see ins
 ## Establishing a Connection With a Postgres Database
 
 First, we'll establish a connection with your default local Postgres database. 
-We'll do so here using {DBI}:
+We'll do so using {DBI}:
 
-```{r}
+```{r message=FALSE}
 library(dm)
 library(DBI)
 library(dplyr)
@@ -77,97 +72,91 @@ dbListTables(con) %>%
 
 This removes all tables and those that depend on them.
 
-# Transferring a {dm} object to a database using `cdm_copy_to`
+## Getting {dm} Objects to Databases 
 
-Let's copy the built-in example {dm} object `cdm_nycflights13()` to our example database.
+In this example, we copy the built-in example {dm} object `cdm_nycflights13()` to our example database. 
+You can do so using `cdm_copy_to()`:
 
 ```{r}
 remote_dm <- cdm_copy_to(
   con, 
   dm = cdm_nycflights13(), 
-  set_key_constraints = FALSE#,
-  # temporary = TRUE
+  set_key_constraints = FALSE,
   )
 ```
 
 Make sure that you allocate your function call to an object to work with later.
-This is necessary if you wish to work with the server later on — for example when you with to use `collect()`, as described below.
+This is necessary to work with the server later on — for example when you with to use `collect()`, as described below.
 
-If we call up the object `con` now, you can see that the tables have been added:
+If you now call up the object `con` now, you will notice that the tables are now inside the database:
 
 ```{r}
 RPostgres::dbListTables(con)
 ```
 
+You'd notice the same thing by calling up the {dm} object you've assigned the function call to:
+
+```{r}
+remote_dm
+```
+
+
 ## Setting Key Constraints on the Database
 
 {dm} supports setting key constraints on the database for MSSQL and Postgres DBMS.
 This means, the {dm} object's local key constraints (information you've provided to {dm} about primary keys and foreign keys) is transferred and applied to the database.
+
 The database will thus be aware about information such as:
 - whether a certain column is a primary key
 - if a column type cannot be NULL
 - if a certain column serves as a foreign key to other tables
 
-In other words: Be sure to include `set_key_constraints = FALSE` in your function call when using a Postgres or MSSQL database if an operation violates foreign key restraints, as it does in our example object above.
-
-Otherwise your attempt will fail with an error message such as 
+This means: Make sure you include the option `set_key_constraints = FALSE` in your function call if an operation violates foreign key restraints, as it does in our example object above.
+This is necessary when working with Postgres or MSSQL databases, otherwise your attempt will fail with an error message such as:
 
 ```
 Error in result_create(conn@ptr, statement) : 
   Failed to fetch row: ERROR:  insert or update on table "flights" violates foreign key constraint "flights_tailnum_fkey"
 DETAIL:  Key (tailnum)=(N3ALAA) is not present in table "planes".
 ```
-
 When you use DBMS other than the latter two, such as SQLite, you're currently good to go using the default `cdm_copy_to()` option regarding `set_key_constraints`, as {dm} does not yet support setting key constraints yet for those DBMS.
 <!-- As a consequence, {dm} does not execute the checks it would on the former two DBMS. -->
 
-
 # Getting Tables from Databases
 
-To retrieve tables from databases, {dm} offers two ways: `cdm_learn_from_db()` and `collect()`, a method for {dplyr}.
+To retrieve {dm} objects from databases, {dm} offers two ways: `cdm_learn_from_db()` and `collect()`, a method for {dplyr}.
 
-# `cdm_learn_from_db()`
+## `cdm_learn_from_db()`
 
+`cdm_learn_from_db()` offers a first way to retrieve tables.
+As opposed to the second, that is `collect()`, it 
 
 ```{r}
-cdm_learn_from_db(remote_dm) 
-src_postgres() %>% 
+remote_src <- dm:::src_from_src_or_con(con)
+db_learned <- remote_src  %>% 
   cdm_learn_from_db()
 
-# id <- Id(Schema = "information_schema", table = "tables")
-# dbReadTable(con, id) %>% as_tibble()
+dplyr::src_postgres() %>%
+  cdm_learn_from_db()
+
+con %>% 
+  cdm_learn_from_db()
+
+remote_dm %>% 
+  cdm_learn_from_db()
 ```
 
-# `collect()`
+## `collect()`
 
-`collect()` provides a method to retrieve tables from a database and saves them  a {dm} object.
+`collect()` provides a method to retrieve tables from a database and saves them a {dm} object.
+
+Again, we'll use the object above, as the `collect()` method will not work on your `con` object.
 
 ```{r}
-dbListTables(con)
+
+remote_dm %>% 
+  collect()
+
+con %>% 
+  collect()
 ```
-
-
-<!-- --- -->
-<!-- <!-- using rsqlite instead  --> -->
-
-<!-- ```{r} -->
-<!-- con <- dbConnect(RSQLite::SQLite(), ":memory:") -->
-<!-- cdm_copy_to(dest = con, dm = cdm_nycflights13()) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- cdm_learn_from_db(con) -->
-
-<!-- cdm_learn_from_db() -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- library(dplyr) -->
-<!-- src_sqlite <- src_sqlite(":memory:", create = TRUE) -->
-<!-- src_sqlite -->
-<!-- nycflights13_remote <- cdm_copy_to(src_sqlite, cdm_nycflights13(cycle = TRUE)) -->
-<!-- nycflights13_remote -->
-<!-- src_postgres <- src_postgres() -->
-<!-- nycflights13_from_remote <- cdm_learn_from_db(nycflights13_remote) -->
-
-<!-- ``` -->
