@@ -34,9 +34,9 @@
 #' cdm_nycflights13() %>% cdm_get_data_model()
 #'
 #' cdm_nycflights13() %>%
-#'   cdm_rename_table(airports, ap)
+#'   cdm_rename_tbl(ap = airports)
 #' cdm_nycflights13() %>%
-#'   cdm_rename_tables(c("airports", "flights"), c("ap", "fl"))
+#'   cdm_rename_tbl(ap = airports, fl = flights)
 #' @export
 dm <- nse_function(c(src, data_model = NULL), ~ {
   # TODO: add keys argument, if both data_model and keys are missing,
@@ -70,32 +70,50 @@ new_dm <- function(src, tables, data_model) {
 
   columns <- as_tibble(data_model$columns)
 
+  data_model_tables <- data_model$tables
+
   keys <- columns %>%
     select(column, table, key) %>%
     filter(key > 0) %>%
     select(-key)
 
   if (is.null(data_model$references)) {
-    references <- data.frame(
+    references <- tibble(
       table = character(),
       column = character(),
       ref = character(),
-      ref_col = character(),
-      stringsAsFactors = FALSE
+      ref_col = character()
     )
   } else {
     references <-
       data_model$references %>%
-      select(table, column, ref, ref_col)
+      select(table, column, ref, ref_col) %>%
+      as_tibble()
   }
+
+  new_dm2(src, tables, data_model_tables, keys, references)
+}
+
+new_dm2 <- function(src = cdm_get_src(base_dm),
+                    tables = cdm_get_tables(base_dm),
+                    data_model_tables = cdm_get_data_model_tables(base_dm),
+                    pks = cdm_get_data_model_pks(base_dm),
+                    fks = cdm_get_data_model_fks(base_dm),
+                    base_dm) {
+
+  stopifnot(!is.null(src))
+  stopifnot(!is.null(tables))
+  stopifnot(!is.null(data_model_tables))
+  stopifnot(!is.null(pks))
+  stopifnot(!is.null(fks))
 
   structure(
     list(
       src = src,
       tables = tables,
-      data_model_tables = data_model$tables,
-      data_model_keys = keys,
-      data_model_references = references
+      data_model_tables = data_model_tables,
+      data_model_pks = pks,
+      data_model_fks = fks
     ),
     class = "dm"
   )
@@ -146,6 +164,18 @@ cdm_get_tables <- function(x) {
   unclass(x)$tables
 }
 
+cdm_get_data_model_tables <- function(x) {
+  unclass(x)$data_model_tables
+}
+
+cdm_get_data_model_pks <- function(x) {
+  unclass(x)$data_model_pks
+}
+
+cdm_get_data_model_fks <- function(x) {
+  unclass(x)$data_model_fks
+}
+
 #' Get data_model component
 #'
 #' `cdm_get_data_model()` returns the \pkg{datamodelr} data model component of a `dm`
@@ -155,21 +185,18 @@ cdm_get_tables <- function(x) {
 #'
 #' @export
 cdm_get_data_model <- function(x) {
-  x <- unclass(x)
-
-  references_for_columns <-
-    x$data_model_references
+  references_for_columns <- cdm_get_data_model_fks(x)
 
   references <-
     references_for_columns %>%
     mutate(ref_id = row_number(), ref_col_num = 1L)
 
   keys <-
-    x$data_model_keys %>%
+    cdm_get_data_model_pks(x) %>%
     mutate(key = 1L)
 
   columns <-
-    x$tables %>%
+    cdm_get_tables(x) %>%
     map(colnames) %>%
     map(~ enframe(., "id", "column")) %>%
     enframe("table") %>%
@@ -177,10 +204,12 @@ cdm_get_data_model <- function(x) {
     mutate(type = "integer") %>%
     left_join(keys, by = c("table", "column")) %>%
     mutate(key = coalesce(key, 0L)) %>%
-    left_join(references_for_columns, by = c("table", "column"))
+    left_join(references_for_columns, by = c("table", "column")) %>%
+    # for compatibility with print method from {datamodelr}
+    as.data.frame()
 
   new_data_model(
-    x$data_model_tables,
+    cdm_get_data_model_tables(x),
     columns,
     references
   )
@@ -213,14 +242,33 @@ as_dm.default <- function(x) {
     abort(paste0("Can't coerce <", class(x)[[1]], "> to <dm>."))
   }
 
-  xl <- map(x, list)
-  names(xl)[names2(xl) == ""] <- ""
-
   # Automatic name repair
-  names(x) <- names(as_tibble(xl, .name_repair = ~ make.names(., unique = TRUE)))
+  names(x) <- vctrs::vec_as_names(names2(x), repair = "unique")
 
-  src <- src_df(env = new_environment(x))
-  dm(src = src)
+  src <- tbl_src(x[[1]])
+
+  # FIXME: Check if all sources identical
+
+  # Empty tibbles as proxy, we don't need to know the columns
+  # and we don't have keys yet
+  proxies <- map(x, ~ tibble(a = 0))
+  data_model <- datamodelr::dm_from_data_frames(proxies)
+
+  new_dm(src, x, data_model)
+}
+
+tbl_src <- function(x) {
+  if (is.data.frame(x)) {
+    src_df(env = new_environment(x))
+  } else if (inherits(x, "tbl_sql"))  {
+    x$src
+  } else {
+    # FIXME: Classed error code
+    stop(
+      "Don't know how to determine table source for object of class ",
+      class(x)[[1]]
+    )
+  }
 }
 
 #' @export
@@ -272,6 +320,7 @@ print.dm <- function(x, ...) {
 
 #' @export
 `[[.dm` <- function(x, name) {
+  if (is.numeric(name)) abort_no_numeric_subsetting()
   table <- as_string(name)
   tbl(x, table)
 }
@@ -285,6 +334,7 @@ print.dm <- function(x, ...) {
 
 #' @export
 `[.dm` <- function(x, name) {
+  if (is.numeric(name)) abort_no_numeric_subsetting()
   tables <- as_character(name)
   cdm_select_tbl(x, !!!tables)
 }
@@ -345,17 +395,7 @@ collect.dm <- function(x, ...) {
 }
 
 
-#' Rename tables of a `dm`
-#'
-#' @description `cdm_rename_table()` changes the name of one of a `dm`'s tables.
-#'
-#' @param dm A `dm` object
-#' @param old_name The original name of the table
-#' @param new_name The new name of the table
-#'
-#'
-#' @export
-cdm_rename_table <- function(dm, old_name, new_name) {
+rename_table_of_dm <- function(dm, old_name, new_name) {
   old_name_q <- as_name(enexpr(old_name))
   check_correct_input(dm, old_name_q)
 
@@ -374,24 +414,25 @@ cdm_rename_table <- function(dm, old_name, new_name) {
   )
 }
 
-#' @description `cdm_rename_tables()` changes the names one or more tables of a `dm`.
+#' Change names of tables in a `dm`
 #'
-#' @rdname cdm_rename_table
+#' @description `cdm_rename_tbl()` changes the names of one or more tables of a `dm`.
 #'
-#' @inheritParams cdm_rename_table
-#' @param old_table_names Character vector or list of the original names of the tables which are to change
-#' @param new_table_names Character vector or list of the new names of the tables
+#' @param dm A `dm` object
+#' @param ... Named character vector (new_name = old_name)
 #'
 #' @export
-cdm_rename_tables <- function(dm, old_table_names, new_table_names) {
-  if (length(old_table_names) != length(new_table_names)) {
-    abort("Length of 'new_table_names' does not match that of 'old_table_names'")
-  }
-  # abort_rename_table_fail(old_names, new_names)
+cdm_rename_tbl <- function(dm, ...) {
+
+  table_list <- tidyselect_dm(dm, ...)
+
+  old_table_names <- table_list[[2]]
+  new_table_names <- names(old_table_names)
+
   reduce2(
     old_table_names,
     new_table_names,
-    cdm_rename_table,
+    rename_table_of_dm,
     .init = dm
   )
 }
