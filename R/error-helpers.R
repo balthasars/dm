@@ -342,10 +342,10 @@ abort_first_rm_fks <- function(fks) {
 }
 
 error_first_rm_fks <- nse_function(c(fks), ~ {
-  child_tbls <- paste0(pull(fks, child_table), collapse = ", ")
-  parent_tbl <- paste0(unique(pull(fks, parent_table)))
+  child_tbls <- paste0(tick(pull(fks, table)), collapse = ", ")
+  parent_tbl <- tick(pull(fks, table)[[1]])
 
-  glue("There are foreign keys pointing from table(s) ({child_tbls}) to table ({parent_tbl}). First remove those or set 'rm_referencing_fks = TRUE'.")
+  glue("There are foreign keys pointing from table(s) {child_tbls} to table {parent_tbl}. First remove those or set `rm_referencing_fks = TRUE`.")
 })
 
 
@@ -364,4 +364,12 @@ abort_update_not_supported <- function() {
 
 error_update_not_supported <- function() {
   paste0('Updating "dm" objects not supported.')
+}
+
+abort_no_numeric_subsetting <- function() {
+  abort(error_no_numeric_subsetting(), .subclass = cdm_error_full("no_numeric_subsetting"))
+}
+
+error_no_numeric_subsetting <- function() {
+  paste0("Can't subset a `dm` object by position, either subset by name or use cdm_get_tables() to convert to a regular list first.")
 }
