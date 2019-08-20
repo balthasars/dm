@@ -69,12 +69,12 @@ dm_lahman_no_keys <- list(
   map(~ mutate(., id = row_number()) %>% as_tibble()) %>%
   as_dm()
 
-# get primary keys for all
+# map function that sets names in list — important for table names
 map_named <- function(x, ...) map(x, ...) %>%
   set_names(x)
 
-# get table names
-candidates <- dm_lahman_no_keys %>%
+# get primary keys for all
+all_pk_candidates <- dm_lahman_no_keys %>%
   cdm_get_tables() %>%
   attr("names") %>%
   # iterate over names
@@ -82,21 +82,88 @@ candidates <- dm_lahman_no_keys %>%
   tibble::enframe() %>%
   tidyr::unnest() %>%
   # only actual candidates
-  filter(candidate)
+  filter(candidate) %>%
+  group_by(name) %>%
+  add_tally() %>%
+  ungroup()
 
-candidates %>%
+# get surrogate keys where no other keys have a natural fit,
+# leave primary key where there is a natural fit
+more_than_one_pk_candidate <- all_pk_candidates %>%
+  filter(n > 1) %>%
+  # more than two keys: randomly choose
+  group_by(name) %>%
+  sample_n(1) %>%
+  ungroup
 
+pk_candidates <- all_pk_candidates %>%
+  filter(n == 1) %>%
+  bind_rows(more_than_one_pk_candidate)
 
-# intermediate setting of primary keys
-lahman_dm_raw_pk <- lahman_dm_raw %>%
-  # cols, where `cdm_enum_pk_candidates` finds candidates
-  cdm_add_pk(People, playerID) %>%
+# check if all are covered
+# pk_candidates %>% count(name) %>% filter(n > 1)
+# obvs this doesn't work
+# map2(
+#    pk_candidates$name, pk_candidates$column,
+#    dm = dm_lahman_no_keys
+#    )
+# recursive function beyond the scope of this exercise
+# there must be a better way to do this!
+
+# debug flawed map call
+# differences in table names?
+# setequal(names(cdm_get_tables(dm_lahman_no_keys)), pk_candidates$name)
+
+# generate columns
+# pk_candidates %>%
+#   select(name, column) %>%
+#   datapasta::tribble_paste()
+dm_lahman_pk <- dm_lahman_no_keys %>%
+  cdm_add_pk(AllstarFull, id) %>%
+  cdm_add_pk(Appearances, id) %>%
+  cdm_add_pk(AwardsManagers, id) %>%
+  cdm_add_pk(AwardsPlayers, id) %>%
+  cdm_add_pk(AwardsShareManagers, id) %>%
+  cdm_add_pk(AwardsSharePlayers, id) %>%
+  cdm_add_pk(Batting, id) %>%
+  cdm_add_pk(BattingPost, id) %>%
+  cdm_add_pk(CollegePlaying, id) %>%
+  cdm_add_pk(Fielding, id) %>%
+  cdm_add_pk(FieldingOF, id) %>%
+  cdm_add_pk(FieldingPost, id) %>%
+  cdm_add_pk(HallOfFame, id) %>%
+  cdm_add_pk(Managers, id) %>%
+  cdm_add_pk(ManagersHalf, id) %>%
+  cdm_add_pk(Pitching, id) %>%
+  cdm_add_pk(PitchingPost, id) %>%
+  cdm_add_pk(Salaries, id) %>%
+  cdm_add_pk(SeriesPost, id) %>%
+  cdm_add_pk(Teams, id) %>%
+  cdm_add_pk(TeamsHalf, id) %>%
   cdm_add_pk(Parks, park.key) %>%
+  cdm_add_pk(People, id) %>%
   cdm_add_pk(Schools, schoolID) %>%
-  cdm_add_pk(TeamsFranchises, franchID) %>%
-  # cols where pk is set manually
-  cdm_add_pk(AllstarFull, playerID)
+  cdm_add_pk(TeamsFranchises, id)
 
+# add foreign keys
+
+# get foreign keys of combinations
+tbl_names <- cdm_get_tables(dm_lahman_pk) %>%
+  attr("names")
+
+# combinations
+combs <- tidyr::crossing(tbl_names, tbl_names) %>%
+  filter(tbl_names != tbl_names1)
+
+<- map2_df(
+  combs$tbl_names,
+  combs$tbl_names1,
+  cdm_enum_fk_candidates,
+  dm = dm_lahman_pk
+  )
+
+# add
+dm_lahman_pk
 lahman_dm_raw_pk %>%
   cdm_add_fk(table = People, playerID, ref_table = Appearances) %>%
   # some managers were also players
@@ -104,15 +171,8 @@ lahman_dm_raw_pk %>%
   # cdm_add_fk(People, Teams)
 
 
-# get foreign keys of combinations
-tbl_names <- lahman_dm_raw %>%
-  cdm_get_tables() %>%
-  attr("names")
 
-combs <- crossing(tbl_names, tbl_names) %>%
-  filter(tbl_names != tbl_names1)
 
-map2(combs$tbl_names, combs$tbl_names1, cdm_enum_fk_candidates, dm = lahman_dm_raw)
 
   # map_named(cdm_enum_pk_candidates, dm = lahman_dm_raw) %>%
 
