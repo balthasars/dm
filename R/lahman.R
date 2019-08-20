@@ -15,12 +15,13 @@
 # functions? get dependencies:
 # itdepends::dep_usage_pkg("dm") %>% distinct(pkg)
 
-cdm_lahman <- function(color = TRUE){
+cdm_lahman <- nse_function(c(cycle = FALSE, color = TRUE), ~{
 
-}
+})
 
-library(dplyr)
 library(dm)
+library(dplyr)
+library(purrr)
 
 # relations are not imported by dbplyr
 # dm::cdm_learn_from_db(dbplyr::copy_lahman(dplyr::src_postgres()))
@@ -31,51 +32,60 @@ library(dm)
 # thus verbose, as dbplyr:::lahman_tables
 # also lists too many
 
-
 # library(Lahman)
-lahman_dm_raw <- as_dm(
-  list(
-    "AllstarFull" = Lahman::AllstarFull,
-    "Appearances" = Lahman::Appearances,
-    "AwardsManagers" = Lahman::AwardsManagers,
-    "AwardsPlayers" = Lahman::AwardsPlayers,
-    "AwardsShareManagers" = Lahman::AwardsShareManagers,
-    "AwardsSharePlayers" = Lahman::AwardsSharePlayers,
-    "Batting" = Lahman::Batting,
-    "BattingPost" = Lahman::BattingPost,
-    "CollegePlaying" = Lahman::CollegePlaying,
-    "Fielding" = Lahman::Fielding,
-    "FieldingOF" = Lahman::FieldingOF,
-    "FieldingPost" = Lahman::FieldingPost,
-    "HallOfFame" = Lahman::HallOfFame,
-    # LahmanData, # meta table
-    "Managers" = Lahman::Managers,
-    "ManagersHalf" = Lahman::ManagersHalf,
-    # Master, # deprecated
-    "Parks" = Lahman::Parks,
-    "People" = Lahman::People, # players
-    "Pitching" = Lahman::Pitching,
-    "PitchingPost" = Lahman::PitchingPost,
-    "Salaries" = Lahman::Salaries,
-    "Schools" = Lahman::Schools,
-    "SeriesPost" = Lahman::SeriesPost,
-    "Teams" = Lahman::Teams,
-    "TeamsFranchises" = Lahman::TeamsFranchises,
-    "TeamsHalf" = Lahman::TeamsHalf
-  )
-)
+
+# alternative: use `src_df()` but how to `filter()`?
+
+dm_lahman_no_keys <- list(
+  "AllstarFull" = Lahman::AllstarFull,
+  "Appearances" = Lahman::Appearances,
+  "AwardsManagers" = Lahman::AwardsManagers,
+  "AwardsPlayers" = Lahman::AwardsPlayers,
+  "AwardsShareManagers" = Lahman::AwardsShareManagers,
+  "AwardsSharePlayers" = Lahman::AwardsSharePlayers,
+  "Batting" = Lahman::Batting,
+  "BattingPost" = Lahman::BattingPost,
+  "CollegePlaying" = Lahman::CollegePlaying,
+  "Fielding" = Lahman::Fielding,
+  "FieldingOF" = Lahman::FieldingOF,
+  "FieldingPost" = Lahman::FieldingPost,
+  "HallOfFame" = Lahman::HallOfFame,
+  # LahmanData, # meta table
+  "Managers" = Lahman::Managers,
+  "ManagersHalf" = Lahman::ManagersHalf,
+  # Master, # deprecated
+  "Parks" = Lahman::Parks,
+  "People" = Lahman::People, # players
+  "Pitching" = Lahman::Pitching,
+  "PitchingPost" = Lahman::PitchingPost,
+  "Salaries" = Lahman::Salaries,
+  "Schools" = Lahman::Schools,
+  "SeriesPost" = Lahman::SeriesPost,
+  "Teams" = Lahman::Teams,
+  "TeamsFranchises" = Lahman::TeamsFranchises,
+  "TeamsHalf" = Lahman::TeamsHalf
+) %>%
+  # create surrogate key
+  map(~ mutate(., id = row_number()) %>% as_tibble()) %>%
+  as_dm()
 
 # get primary keys for all
 map_named <- function(x, ...) map(x, ...) %>%
   set_names(x)
 
-lahman_dm_raw %>%
+# get table names
+candidates <- dm_lahman_no_keys %>%
   cdm_get_tables() %>%
   attr("names") %>%
-  map_named(cdm_enum_pk_candidates, dm = lahman_dm_raw) %>%
-  enframe() %>%
-  unnest() %>%
+  # iterate over names
+  map_named(cdm_enum_pk_candidates, dm = dm_lahman_no_keys) %>%
+  tibble::enframe() %>%
+  tidyr::unnest() %>%
+  # only actual candidates
   filter(candidate)
+
+candidates %>%
+
 
 # intermediate setting of primary keys
 lahman_dm_raw_pk <- lahman_dm_raw %>%
