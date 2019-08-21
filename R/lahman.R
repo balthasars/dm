@@ -147,20 +147,24 @@ dm_lahman_pk <- dm_lahman_no_keys %>%
 
 # add foreign keys
 
-# get foreign keys of combinations
-tbl_names <- cdm_get_tables(dm_lahman_pk) %>%
+# get table names
+table_names <- cdm_get_tables(dm_lahman_pk) %>%
   attr("names")
 
-# combinations
-combs <- tidyr::crossing(tbl_names, tbl_names) %>%
-  filter(tbl_names != tbl_names1)
+# make combinations of tables
+table_combs <- tidyr::crossing(table_names, table_names) %>%
+  filter(table_names != table_names1)
 
-<- map2_df(
-  combs$tbl_names,
-  combs$tbl_names1,
+# check candidates for each combination
+combinations <- map2_df(
+  table_combs$table_names,
+  table_combs$table_names1,
   cdm_enum_fk_candidates,
   dm = dm_lahman_pk
   )
+
+combinations %>%
+  filter(candidate)
 
 # add
 dm_lahman_pk
