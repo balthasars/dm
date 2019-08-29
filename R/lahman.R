@@ -35,6 +35,18 @@ library(purrr)
 # library(Lahman)
 
 # alternative: use `src_df()` but how to `filter()`?
+# <- dbplyr:::lahman_tables()
+
+# lahman_src <- dbplyr::copy_lahman(src_postgres())
+# lahman_dm <- lahman_src %>% dm::cdm_learn_from_db()
+
+
+
+# <- dbplyr:::lahman_tables()
+# lahman_src <- dbplyr::copy_lahman(src_postgres())
+# lahman_dm <- lahman_src %>% dm::cdm_learn_from_db()
+
+
 
 dm_lahman_no_keys <- list(
   "AllstarFull" = Lahman::AllstarFull,
@@ -53,7 +65,7 @@ dm_lahman_no_keys <- list(
   # LahmanData, # meta table
   "Managers" = Lahman::Managers,
   "ManagersHalf" = Lahman::ManagersHalf,
-  # Master, # deprecated
+  # Master, # deprecated, People table is now used instead
   "Parks" = Lahman::Parks,
   "People" = Lahman::People, # players
   "Pitching" = Lahman::Pitching,
@@ -91,7 +103,7 @@ all_pk_candidates <- dm_lahman_no_keys %>%
 # leave primary key where there is a natural fit
 more_than_one_pk_candidate <- all_pk_candidates %>%
   filter(n > 1) %>%
-  # more than two keys: randomly choose
+  # more than two candidates: randomly choose
   group_by(name) %>%
   sample_n(1) %>%
   ungroup
@@ -173,12 +185,6 @@ lahman_dm_raw_pk %>%
   # some managers were also players
   cdm_add_fk(AwardsManagers, playerID, People) #%>%
   # cdm_add_fk(People, Teams)
-
-
-
-
-
-  # map_named(cdm_enum_pk_candidates, dm = lahman_dm_raw) %>%
 
 
 lahman_dm_raw %>%
