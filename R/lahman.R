@@ -35,75 +35,88 @@ library(purrr)
 # library(Lahman)
 
 # alternative: use `src_df()` but how to `filter()`?
-# <- dbplyr:::lahman_tables()
-
-# lahman_src <- dbplyr::copy_lahman(src_postgres())
-# lahman_dm <- lahman_src %>% dm::cdm_learn_from_db()
-
-
 
 # <- dbplyr:::lahman_tables()
 # lahman_src <- dbplyr::copy_lahman(src_postgres())
 # lahman_dm <- lahman_src %>% dm::cdm_learn_from_db()
 
+# get names of tables
+names_src_lahman <- src_df(pkg = "Lahman") %>%
+  .$env %>%
+  objects()
 
+# exclude deprecated data
+setdiff(names_src_lahman, c("Master", "LahmanData")) %>%
+  paste0("Lahman::", .)
 
-dm_lahman_no_keys <- list(
-  "AllstarFull" = Lahman::AllstarFull,
-  "Appearances" = Lahman::Appearances,
-  "AwardsManagers" = Lahman::AwardsManagers,
-  "AwardsPlayers" = Lahman::AwardsPlayers,
-  "AwardsShareManagers" = Lahman::AwardsShareManagers,
-  "AwardsSharePlayers" = Lahman::AwardsSharePlayers,
-  "Batting" = Lahman::Batting,
-  "BattingPost" = Lahman::BattingPost,
-  "CollegePlaying" = Lahman::CollegePlaying,
-  "Fielding" = Lahman::Fielding,
-  "FieldingOF" = Lahman::FieldingOF,
-  "FieldingPost" = Lahman::FieldingPost,
-  "HallOfFame" = Lahman::HallOfFame,
-  # LahmanData, # meta table
-  "Managers" = Lahman::Managers,
-  "ManagersHalf" = Lahman::ManagersHalf,
-  # Master, # deprecated, People table is now used instead
-  "Parks" = Lahman::Parks,
-  "People" = Lahman::People, # players
-  "Pitching" = Lahman::Pitching,
-  "PitchingPost" = Lahman::PitchingPost,
-  "Salaries" = Lahman::Salaries,
-  "Schools" = Lahman::Schools,
-  "SeriesPost" = Lahman::SeriesPost,
-  "Teams" = Lahman::Teams,
-  "TeamsFranchises" = Lahman::TeamsFranchises,
-  "TeamsHalf" = Lahman::TeamsHalf
-) %>%
-  # create surrogate key
-  map(~ mutate(., id = row_number()) %>% as_tibble()) %>%
+tibble_with_names <- function(input_tibble){
+  tibble(
+    tibble_name = as.character(input_tibble),
+    data = eval(parse(text = input_tibble)) %>% list()
+  )
+}
+
+# example
+# "Lahman::TeamsHalf" %>%
+#   tibble_with_names()
+
+# function to add primary key
+add_id <- function(df, df_name){
+  df_name_quo <- paste0(df_name, "_id")
+  df %>%
+    mutate(!!df_name_quo := row_number())
+}
+
+data_nested <-
+  # exclude deprecated data
+  setdiff(names_src_lahman, c("Master", "LahmanData")) %>%
+  # construct source
+  paste0("Lahman::", .) %>%
+  # add all to nested data frame
+  map_df(tibble_with_names) %>%
+  # repurpose column to make list name
+  mutate(tibble_name = str_remove(tibble_name, "Lahman::"))
+
+# from nested df to list to dm
+lahman_no_keys <- set_names(as.list(data_nested$data), data_nested$tibble_name) %>%
   as_dm()
+
+# with `list2()` ?
+# make_list <- function(list_element_names, data_frames){
+#   list_element_names_quos <- enquos(list_element_names)
+#   data_frames_quos <- enquos(data_frames)
+#
+#   rlang::list2(list_element_name_quo := !!!data)
+# }
+
+add_id(df = Lahman::AllstarFull, df_name = "hello") %>%
+  as_tibble()
 
 # map function that sets names in list — important for table names
 map_named <- function(x, ...) map(x, ...) %>%
   set_names(x)
 
-# get primary keys for all
-all_pk_candidates <- dm_lahman_no_keys %>%
-  cdm_get_tables() %>%
-  attr("names") %>%
-  # iterate over names
-  map_named(cdm_enum_pk_candidates, dm = dm_lahman_no_keys) %>%
-  tibble::enframe() %>%
-  tidyr::unnest() %>%
-  # only actual candidates
-  filter(candidate) %>%
-  group_by(name) %>%
-  add_tally() %>%
-  ungroup()
+get_all_pks <- function(dm_input){
+  table_names <- cdm_get_tables(dm_input) %>%
+    names()
+  table_names %>%
+    map_named(cdm_enum_pk_candidates, dm = dm_input) %>%
+    tibble::enframe() %>%
+    tidyr::unnest() %>%
+    # only actual candidates
+    filter(candidate) %>%
+    group_by(name) %>%
+    add_tally() %>%
+    ungroup()
+}
+
+all_pk_candidates <- get_all_pks(lahman_no_keys)
 
 # get surrogate keys where no other keys have a natural fit,
 # leave primary key where there is a natural fit
 more_than_one_pk_candidate <- all_pk_candidates %>%
   filter(n > 1) %>%
-  # more than two candidates: randomly choose
+  # more than two keys: randomly choose
   group_by(name) %>%
   sample_n(1) %>%
   ungroup
@@ -173,7 +186,7 @@ combinations <- map2_df(
   table_combs$table_names1,
   cdm_enum_fk_candidates,
   dm = dm_lahman_pk
-  )
+)
 
 combinations %>%
   filter(candidate)
@@ -184,11 +197,8 @@ lahman_dm_raw_pk %>%
   cdm_add_fk(table = People, playerID, ref_table = Appearances) %>%
   # some managers were also players
   cdm_add_fk(AwardsManagers, playerID, People) #%>%
-  # cdm_add_fk(People, Teams)
+# cdm_add_fk(People, Teams)
 
-
-lahman_dm_raw %>%
-  cdm_
 
 lahman_dm_raw %>%
   cdm_enum_fk_candidates(AwardsManagers, Managers)
