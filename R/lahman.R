@@ -15,9 +15,9 @@
 # functions? get dependencies:
 # itdepends::dep_usage_pkg("dm") %>% distinct(pkg)
 
-cdm_lahman <- nse_function(c(cycle = FALSE, color = TRUE), ~ {
-
-})
+# cdm_lahman <- nse_function(c(cycle = FALSE, color = TRUE), ~ {
+#
+# })
 
 library(dm)
 library(dplyr)
@@ -45,6 +45,17 @@ names_src_lahman <- src_df(pkg = "Lahman") %>%
   .$env %>%
   objects()
 
+# subset to relevant tables
+sub_names_src <- setdiff(
+  names_src_lahman,
+  c(
+    # remove deprecated dfs
+    "Master", "LahmanData",
+    # remove dfs with labels
+    stringr::str_extract(names_src_lahman, ".*Label.*")
+    )
+)
+
 # function takes name of data frame as input col `tibble_name` and evaluates it
 # in other col `data` to produce list column
 tibble_with_names <- function(input_tibble) {
@@ -55,7 +66,7 @@ tibble_with_names <- function(input_tibble) {
     data = eval(parse(text = input_tibble)) %>% list()
   ) %>%
   # repurpose column to make name for `dm` later on
-  mutate(tibble_name = str_remove(tibble_name, "Lahman::"))
+  mutate(tibble_name = stringr::str_remove(tibble_name, "Lahman::"))
 }
 
 # example for `tibble_with_names()`
@@ -63,11 +74,12 @@ tibble_with_names <- function(input_tibble) {
 #   tibble_with_names()
 
 data_nested <-
-  # construct source and exclude deprecated data
-  setdiff(names_src_lahman, c("Master", "LahmanData")) %>%
-  paste0("Lahman::", .) %>%
+  # construct source names
+  paste0("Lahman::", sub_names_src) %>%
   # make nested data frame
   map_df(tibble_with_names)
+
+# lahman_no_keys %>% cdm_enum_pk_candidates("AwardsManagers")
 
 # from nested df to list to dm
 lahman_no_keys <- set_names(as.list(data_nested$data), data_nested$tibble_name) %>%
@@ -81,6 +93,68 @@ lahman_no_keys <- set_names(as.list(data_nested$data), data_nested$tibble_name) 
 #   rlang::list2(list_element_name_quo := !!!data)
 # }
 
+get_all_pk_candidates <- function(dm_input) {
+
+  # `map()` function that sets names in list — needed for table
+  map_named <- function(x, ...) map(x, ...) %>%
+      set_names(x)
+
+  df_names <- cdm_get_tables(dm_input) %>%
+    names()
+
+  # get pk candidates for all tables
+  candidates_all_tables <- df_names %>%
+    map_named(cdm_enum_pk_candidates, dm = dm_input) %>%
+    tibble::enframe() %>%
+    tidyr::unnest()
+}
+
+candidates_all_tables <- get_all_pk_candidates(lahman_no_keys)
+
+dfs_with_pk_candidates <- candidates_all_tables %>%
+  filter(candidate) %>%
+  distinct(name) %>%
+  pull(name)
+
+dfs_without_pk_candidates <- candidates_all_tables %>%
+  filter(!candidate) %>%
+  distinct(name) %>%
+  pull(name) %>%
+  setdiff(., dfs_with_pk_candidates)
+
+#  get surrogate keys where no other keys have a natural fit,
+#  leave primary key where there is a natural fit
+
+pk_candidates_tallied <- candidates_all_tables %>%
+  group_by(name) %>%
+  filter(candidate) %>%
+  add_tally()
+
+more_than_one_pk_candidate <- pk_candidates_tallied %>%
+  filter(n > 1) %>%
+  # more than two keys: grouped randomly sample
+  # maybe not such a good idea?
+  sample_n(1) %>%
+  ungroup()
+
+pk_candidates <- pk_candidates_tallied %>%
+  filter(n == 1) %>%
+  bind_rows(more_than_one_pk_candidate) %>%
+  select(-n)
+
+no_pk_candidates <- dfs_without_pk_candidates
+
+set_keys <- tibble(
+  df = c(dfs_without_pk_candidates, pk_candidates$name),
+  keys = c(rep_along(dfs_without_pk_candidates, NA), pk_candidates$column)
+)
+
+# add surrogate keys to dfs where no primary key is available
+
+data_nested %>%
+  mutate(data, )
+
+
 # function to add surrogate key
 add_id <- function(df, df_name) {
   df_name_quo <- paste0(df_name, "_id")
@@ -88,44 +162,9 @@ add_id <- function(df, df_name) {
     mutate(!!df_name_quo := row_number())
 }
 
-add_id(df = Lahman::AllstarFull, df_name = "hello") %>%
-  as_tibble()
+# add_id(df = Lahman::AllstarFull, df_name = "hello") %>%
+#   as_tibble()
 
-# `map()` function that sets names in list — needed for table
-map_named <- function(x, ...) map(x, ...) %>%
-    set_names(x)
-
-get_all_pks <- function(dm_input) {
-
-  table_names <- cdm_get_tables(dm_input) %>%
-    names()
-
-  table_names %>%
-    map_named(cdm_enum_pk_candidates, dm = dm_input) %>%
-    tibble::enframe() %>%
-    tidyr::unnest() %>%
-    # only actual candidates
-    filter(candidate) %>%
-    group_by(name) %>%
-    add_tally() %>%
-    ungroup()
-}
-
-all_pk_candidates <- get_all_pks(lahman_no_keys)
-
-#  get surrogate keys where no other keys have a natural fit,
-#  leave primary key where there is a natural fit
-
-more_than_one_pk_candidate <- all_pk_candidates %>%
-  filter(n > 1) %>%
-  #  more than two keys: randomly choose
-  group_by(name) %>%
-  sample_n(1) %>%
-  ungroup()
-
-pk_candidates <- all_pk_candidates %>%
-  filter(n == 1) %>%
-  bind_rows(more_than_one_pk_candidate)
 
 # check if all are covered
 # pk_candidates %>% count(name) %>% filter(n > 1)
@@ -183,15 +222,16 @@ table_combs <- tidyr::crossing(table_names, table_names) %>%
   filter(table_names != table_names1)
 
 #  check candidates for each combination
-combinations <- map2_df(
-  table_combs$table_names,
-  table_combs$table_names1,
-  cdm_enum_fk_candidates,
-  dm = dm_lahman_pk
-)
-
-combinations %>%
-  filter(candidate)
+# ---> this makes no sense with surrogate keys?
+# combinations <- map2_df(
+#   table_combs$table_names,
+#   table_combs$table_names1,
+#   cdm_enum_fk_candidates,
+#   dm = dm_lahman_pk
+# )
+#
+# combinations %>%
+#   filter(candidate)
 
 # add
 dm_lahman_pk
